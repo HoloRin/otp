@@ -30,9 +30,9 @@
 -export([all/0, suite/0, init_per_suite/1, end_per_suite/1,
          init_per_testcase/2, end_per_testcase/2]).
 
--export([args_file/1, evil_args_file/1, missing_args_file/1, env/1, args_file_env/1,
-         otp_7461/1, otp_7461_remote/1, argument_separation/1, argument_with_option/1,
-         zdbbl_dist_buf_busy_limit/1]).
+-export([args_file/1, evil_args_file/1, missing_args_file/1, env/1, long_path_in_env_not_truncated/1,
+         bin_dir_at_the_end_of_long_path_env/1, args_file_env/1, otp_7461/1, otp_7461_remote/1, 
+         argument_separation/1, argument_with_option/1, zdbbl_dist_buf_busy_limit/1]).
 
 -include_lib("common_test/include/ct.hrl").
 
@@ -41,7 +41,8 @@ suite() ->
      {timetrap, {minutes, 1}}].
 
 all() -> 
-    [args_file, evil_args_file, missing_args_file, env, args_file_env,
+    [args_file, evil_args_file, missing_args_file, long_path_in_env_not_truncated, 
+     bin_dir_at_the_end_of_long_path_env, env, args_file_env,
      otp_7461, argument_separation, argument_with_option, zdbbl_dist_buf_busy_limit].
 
 init_per_suite(Config) ->
@@ -332,6 +333,42 @@ env(Config) when is_list(Config) ->
 		      Extra),
     ok.
 
+bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
+    % Get PATH from erl
+    ErlPath = emu_args("-eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", [return_output]),
+    [ErlPath1 | _] = string:split(ErlPath, "\n"),
+    
+    % Split PATH into components
+    PathComponents = string:split(ErlPath1, ":", all),
+    [BinDir | _] = PathComponents,
+    
+    % Build long PATH
+    LongPath = build_long_path("/tmp/path_does_not_matter"),
+    LongPathWithBinDir = LongPath ++ ":" ++ BinDir,
+    
+    % Set PATH and run erl
+    os:putenv("PATH", LongPathWithBinDir),
+    Output = emu_args("-eval 'io:format(\"hello~n\", [])' -s init stop -noshell", [return_output]),
+    
+    ["hello"] = string:split(Output, "\n", all) -- [""],
+    ok.
+
+long_path_in_env_not_truncated(Config) when is_list(Config) ->
+    % Build long PATH
+    % LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
+    LongPath = os:getenv("PATH"),
+
+    % Set PATH and run erl
+    os:putenv("PATH", LongPath),
+    ErlPath = emu_args("-eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", [return_output]),
+    
+    string:find(ErlPath, "/tmp/erl_path"),
+    ok.
+
+build_long_path(Path) when length(Path) < 1024 ->
+    build_long_path(Path ++ ":/tmp/" ++ erlang:integer_to_list(erlang:unique_integer([positive])));
+build_long_path(Path) -> Path.
+
 args_file_env(Config) when is_list(Config) ->
     AFN1 = privfile("1", Config),
     AFN2 = privfile("2", Config),
@@ -453,7 +490,8 @@ save_env() ->
      os:getenv("ERL_AFLAGS"),
      os:getenv("ERL_FLAGS"),
      os:getenv("ERL_"++erlang:system_info(otp_release)++"_FLAGS"),
-     os:getenv("ERL_ZFLAGS")}.
+     os:getenv("ERL_ZFLAGS"),
+     os:getenv("PATH")}.
 
 restore_env(EVar, false) when is_list(EVar) ->
     restore_env(EVar, "");
@@ -470,11 +508,12 @@ restore_env(EVar, Value) when is_list(EVar), is_list(Value) ->
 	_ -> os:putenv(EVar, Value)
     end.
 
-restore_env({erl_flags, AFlgs, Flgs, RFlgs, ZFlgs}) ->
+restore_env({erl_flags, AFlgs, Flgs, RFlgs, ZFlgs, Path}) ->
     restore_env("ERL_AFLAGS", AFlgs),
     restore_env("ERL_FLAGS", Flgs),
     restore_env("ERL_"++erlang:system_info(otp_release)++"_FLAGS", RFlgs),
     restore_env("ERL_ZFLAGS", ZFlgs),
+    restore_env("PATH", Path),
     ok.
 
 privfile(Name, Config) ->
