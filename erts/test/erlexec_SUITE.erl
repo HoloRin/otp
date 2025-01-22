@@ -352,15 +352,19 @@ bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
     end.
 
 long_path_in_env_not_truncated(Config) when is_list(Config) ->
-    % LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
-    LongPath = os:getenv("PATH"),
-    os:putenv("PATH", LongPath),
-    
+    % get the path of `Erl` executable by shelling out to `which`
     {ok,[[Erl]]} = init:get_argument(progname),
-    ErlPath = os:cmd(Erl ++ " -eval 'io:format(\"~s~n\", [re:replace(os:getenv(\"PATH\"), \"[^\\x00-\\x7F]\", \"\", [global, {return, list}])])' -s init stop -noshell", #{ max_size => 10500 }),
+    ct:log("ERL Executable: ~s", [Erl]),
+    ErlangFullPath = os:cmd("which erl"),
 
-    ct:log("ErlPath: ~s", [ErlPath]),
-    case string:find(ErlPath, "/tmp/erl_path") of
+    LongPath = build_long_path("/tmp/test") ++ ":/tmp/erl_path",
+    os:putenv("PATH", LongPath),
+
+    PathValueFromErlangUnderTest = os:cmd(ErlangFullPath ++ " -eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", #{ max_size => 10500 }),
+    ct:log("ErlPath: ~s", [PathValueFromErlangUnderTest]),
+
+
+    case string:find(PathValueFromErlangUnderTest, "/tmp/erl_path") of
         nomatch -> exit({long_path_in_env_truncated, "Path was truncated"});
         _ -> ok
     end.
