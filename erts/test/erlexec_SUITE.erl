@@ -352,13 +352,12 @@ bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
     end.
 
 long_path_in_env_not_truncated(Config) when is_list(Config) ->
-%%    LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
-%%    LongPath = os:getenv("PATH"),
+    % LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
+    LongPath = os:getenv("PATH"),
+    os:putenv("PATH", LongPath),
+    
     {ok,[[Erl]]} = init:get_argument(progname),
-    Path = "/Users/adambray/go/bin:/Applications/Webstorm.app/Contents/MacOS:/Applications/Rider.app/Contents/MacOS:/Applications/IntelliJ IDEA.app/Contents/MacOS:/Users/adambray/.local/bin/:/Users/adambray/Library/Python/3.9/bin:/Users/adambray/.local/share/bin:/Users/adambray/.npm-packages/bin:/Users/adambray/bin:/Users/adambray/.pnpm-packages/bin:/Users/adambray/.pnpm-packages:/Users/adambray/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin:/Users/adambray/.zsh/plugins/powerlevel10k:/Users/adambray/.zsh/plugins/powerlevel10k-config",
-    os:putenv("PATH", build_long_path(Path) ++ ":/tmp/erl_path"),
-
-    ErlPath = os:cmd(Erl ++ " -eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", #{ max_size => 10500 }),
+    ErlPath = os:cmd(Erl ++ " -eval 'io:format(\"~s~n\", [re:replace(os:getenv(\"PATH\"), \"[^\\x00-\\x7F]\", \"\", [global, {return, list}])])' -s init stop -noshell", #{ max_size => 10500 }),
 
     ct:log("ErlPath: ~s", [ErlPath]),
     case string:find(ErlPath, "/tmp/erl_path") of
