@@ -346,19 +346,23 @@ bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
     os:putenv("PATH", LongPathWithBinDir),
     Output = emu_args("-eval 'io:format(\"hello~n\", [])' -s init stop -noshell", [return_output]),
 
-    string:find(Output, "hello"),
-    ok.
+    case string:find(Output, "hello") of
+        nomatch -> exit({error, "erlang crashed parsing arguments"});
+        _ -> ok
+    end.
 
 long_path_in_env_not_truncated(Config) when is_list(Config) ->
     LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
     os:putenv("PATH", LongPath),
 
     ErlPath = emu_args("-eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", [return_output]),
-    
-    string:find(ErlPath, "/tmp/erl_path"),
-    ok.
 
-build_long_path(Path) when length(Path) < 10240 ->
+    case string:find(ErlPath, "/tmp/erl_path") of
+        nomatch -> exit({long_path_in_env_truncated, "Path was truncated"});
+        _ -> ok
+    end.
+
+build_long_path(Path) when length(Path) < 20240 ->
     build_long_path(Path ++ ":/tmp/" ++ erlang:integer_to_list(erlang:unique_integer([positive])));
 build_long_path(Path) -> Path.
 
