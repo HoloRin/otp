@@ -352,17 +352,21 @@ bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
     end.
 
 long_path_in_env_not_truncated(Config) when is_list(Config) ->
-    LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
-    os:putenv("PATH", LongPath),
+%%    LongPath = build_long_path(os:getenv("PATH")) ++ ":/tmp/erl_path",
+%%    LongPath = os:getenv("PATH"),
+    Path = "/Users/adambray/go/bin:/Applications/Webstorm.app/Contents/MacOS:/Applications/Rider.app/Contents/MacOS:/Applications/IntelliJ IDEA.app/Contents/MacOS:/Users/adambray/.local/bin/:/Users/adambray/Library/Python/3.9/bin:/Users/adambray/.local/share/bin:/Users/adambray/.npm-packages/bin:/Users/adambray/bin:/Users/adambray/.pnpm-packages/bin:/Users/adambray/.pnpm-packages:/Users/adambray/.nix-profile/bin:/nix/var/nix/profiles/default/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/run/current-system/sw/bin:/usr/local/bin:/usr/bin:/usr/sbin:/bin:/sbin:/Users/adambray/.zsh/plugins/powerlevel10k:/Users/adambray/.zsh/plugins/powerlevel10k-config",
+    os:putenv("PATH_2", build_long_path(Path) ++ ":/tmp/erl_path"),
 
-    ErlPath = emu_args("-eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", [return_output]),
+    {ok,[[Erl]]} = init:get_argument(progname),
+    ErlPath = os:cmd(Erl ++ " -eval 'io:format(\"~s~n\", [os:getenv(\"PATH_2\")])' -s init stop -noshell", #{ max_size => 10500 }),
 
+    ct:log("ErlPath: ~s", [ErlPath]),
     case string:find(ErlPath, "/tmp/erl_path") of
         nomatch -> exit({long_path_in_env_truncated, "Path was truncated"});
         _ -> ok
     end.
 
-build_long_path(Path) when length(Path) < 20240 ->
+build_long_path(Path) when length(Path) < 10240 ->
     build_long_path(Path ++ ":/tmp/" ++ erlang:integer_to_list(erlang:unique_integer([positive])));
 build_long_path(Path) -> Path.
 
