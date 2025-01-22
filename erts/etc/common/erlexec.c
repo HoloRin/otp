@@ -555,21 +555,29 @@ int main(int argc, char **argv)
     if (s == NULL) {
         erts_snprintf(tmpStr, sizeof(tmpStr),
             "%s" PATHSEP "%s" DIRSEP "bin" PATHSEP, bindir, rootdir);
+        set_env("PATH", tmpStr);
     } else if (strstr(s, rootdir) == NULL) {
         erts_snprintf(tmpStr, sizeof(tmpStr),
             "%s" PATHSEP "%s" DIRSEP "bin" PATHSEP "%s", bindir, rootdir, s);
+        set_env("PATH", tmpStr);
     } else {
+        char *pathBuf = NULL;
+        int pathBufLen = 0;
+
         const char *bindir_slug, *bindir_slug_index;
         int bindir_slug_length;
         const char *in_index;
         char *out_index;
 
-        erts_snprintf(tmpStr, sizeof(tmpStr), "%s" PATHSEP, bindir);
+        pathBufLen = strlen(s) + strlen(bindir) + strlen(PATHSEP);
+        pathBuf = emalloc(pathBufLen);
 
-        bindir_slug = strsave(tmpStr);
+        erts_snprintf(pathBuf, pathBufLen, "%s" PATHSEP, bindir);
+
+        bindir_slug = strsave(pathBuf);
         bindir_slug_length = strlen(bindir_slug);
 
-        out_index = &tmpStr[bindir_slug_length];
+        out_index = &pathBuf[bindir_slug_length];
         in_index = s;
 
         while ((bindir_slug_index = strstr(in_index, bindir_slug))) {
@@ -582,10 +590,11 @@ int main(int argc, char **argv)
         }
         efree((void*)bindir_slug);
         strcpy(out_index, in_index);
-    }
 
+        set_env("PATH", pathBuf);
+        efree(pathBuf);
+    }
     free_env_val(s);
-    set_env("PATH", tmpStr);
 
     i = 1;
 
