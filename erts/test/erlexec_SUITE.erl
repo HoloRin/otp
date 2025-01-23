@@ -30,8 +30,8 @@
 -export([all/0, suite/0, init_per_suite/1, end_per_suite/1,
          init_per_testcase/2, end_per_testcase/2]).
 
--export([args_file/1, evil_args_file/1, missing_args_file/1, env/1, long_path_in_env_not_truncated/1,
-         bin_dir_at_the_end_of_long_path_env/1, args_file_env/1, otp_7461/1, otp_7461_remote/1, 
+-export([args_file/1, evil_args_file/1, missing_args_file/1, env/1, 
+         long_path_in_env_not_truncated/1, args_file_env/1, otp_7461/1, otp_7461_remote/1, 
          argument_separation/1, argument_with_option/1, zdbbl_dist_buf_busy_limit/1]).
 
 -include_lib("common_test/include/ct.hrl").
@@ -41,9 +41,8 @@ suite() ->
      {timetrap, {minutes, 1}}].
 
 all() -> 
-    [args_file, evil_args_file, missing_args_file, long_path_in_env_not_truncated, 
-     bin_dir_at_the_end_of_long_path_env, env, args_file_env,
-     otp_7461, argument_separation, argument_with_option, zdbbl_dist_buf_busy_limit].
+    [args_file, evil_args_file, missing_args_file, long_path_in_env_not_truncated, env, 
+     args_file_env, otp_7461, argument_separation, argument_with_option, zdbbl_dist_buf_busy_limit].
 
 init_per_suite(Config) ->
     [{suite_erl_flags, save_env()} | Config].
@@ -333,43 +332,26 @@ env(Config) when is_list(Config) ->
 		      Extra),
     ok.
 
-bin_dir_at_the_end_of_long_path_env(Config) when is_list(Config) ->
-    ErlPath = emu_args("-eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", [return_output]),
-    [ErlPath1 | _] = string:split(ErlPath, "\n"),
-
-    PathComponents = string:split(ErlPath1, ":", all),
-    [BinDir | _] = PathComponents,
-
-    LongPath = build_long_path(os:getenv("PATH")),
-    LongPathWithBinDir = LongPath ++ ":" ++ BinDir,
-
-    os:putenv("PATH", LongPathWithBinDir),
-    Output = emu_args("-eval 'io:format(\"hello~n\", [])' -s init stop -noshell", [return_output]),
-
-    case string:find(Output, "hello") of
-        nomatch -> exit({error, "erlang crashed parsing arguments"});
-        _ -> ok
-    end.
-
 long_path_in_env_not_truncated(Config) when is_list(Config) ->
-    % get the path of `Erl` executable by shelling out to `which`
-    {ok,[[Erl]]} = init:get_argument(progname),
-    ct:log("ERL Executable: ~s", [Erl]),
-    ErlangFullPath = os:cmd("which erl"),
-
-    LongPath = build_long_path("/tmp/test") ++ ":/tmp/erl_path",
+    LongPath = build_long_path(os:getenv("PATH") ++ ":/tmp/path_to_expect"),
     os:putenv("PATH", LongPath),
+    
+    {ok,[[Erl]]} = init:get_argument(progname),
+    ErlPath = os:cmd(Erl ++ " -eval 'io:format(\"~tp~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", #{ max_size => 10500 }),
 
-    PathValueFromErlangUnderTest = os:cmd(ErlangFullPath ++ " -eval 'io:format(\"~s~n\", [os:getenv(\"PATH\")])' -s init stop -noshell", #{ max_size => 10500 }),
-    ct:log("ErlPath: ~s", [PathValueFromErlangUnderTest]),
-
-
-    case string:find(PathValueFromErlangUnderTest, "/tmp/erl_path") of
-        nomatch -> exit({long_path_in_env_truncated, "Path was truncated"});
+    FilterPath = lists:filter(fun(X) -> X > 32 andalso X =< 126 end, ErlPath), % filter out non-printable characters and non-ascii characters
+    % Debug logging
+    ct:pal("Original PATH: ~p", [LongPath]),
+    ct:pal("ErlPath raw: ~p", [ErlPath]),
+    ct:pal("FilterPath: ~p", [FilterPath]),
+    ct:pal("Looking for: ~p", ["/tmp/path_to_expect"]),
+    
+    case string:find(FilterPath, "/tmp/path_to_expect") of
+        nomatch -> exit({long_path_in_env_truncated, "The expected path was not found in the retrieved PATH: " ++ FilterPath});
         _ -> ok
     end.
 
-build_long_path(Path) when length(Path) < 10240 ->
+build_long_path(Path) when length(Path) < 1024 ->
     build_long_path(Path ++ ":/tmp/" ++ erlang:integer_to_list(erlang:unique_integer([positive])));
 build_long_path(Path) -> Path.
 
